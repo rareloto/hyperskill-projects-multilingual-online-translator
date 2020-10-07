@@ -1,3 +1,6 @@
+# Multilingual Online Translator
+# A Hyperskill Hands-on Project
+
 from bs4 import BeautifulSoup
 import requests
 import sys
@@ -10,12 +13,8 @@ class Translator:
 			'Hebrew', 'Japanese', 'Dutch', 'Polish', 'Portuguese',
 			'Romanian', 'Russian', 'Turkish'
 		)
-		args = tuple(arg.title() for arg in sys.argv)
-		self.lang_src = args[1] if len(args) > 2 else ''
-		self.lang_tgt = tuple(args[2:-1]) if len(args) > 2 else ()
-		if len(args) > 2 and (args[2] == 'All' or len(args) == 3):
-			self.lang_tgt = tuple(lang for lang in self.languages if lang not in (self.lang_src))
-		self.word = args[-1] if len(args) > 2 else ''
+		self.lang_src, self.lang_tgt = '', ()
+		self.word = ''
 		self.response = ''
 		self.translations = ()
 		self.examples_src, self.examples_tgt = (), ()
@@ -24,10 +23,25 @@ class Translator:
 		self.output_file = ''
 
 	def main(self):
-		if len(sys.argv) == 1:
+		if len(sys.argv) > 1:
+			self.inline_request()
+		else:
 			self.welcome_message()
+			
 		self.request_translation()
 		self.display_results()
+		
+	def inline_request(self):
+		args = tuple(arg.title() for arg in sys.argv)
+		
+		try:
+			self.lang_src, self.lang_tgt = args[1], tuple(args[2:-1])
+			self.word = args[-1]
+		except IndexError:
+			sys.exit('Insufficient number of arguments provided. Please try again.')
+		else:
+			if args[2] == 'All':
+				self.lang_tgt = tuple(lang for lang in self.languages if lang not in (self.lang_src))
 		
 	def welcome_message(self):
 		print("Hello! I am Tan the Translator. I currently support:")
@@ -45,9 +59,16 @@ class Translator:
 		self.output_file = open(self.word.lower() + '.txt', 'w+')
 
 		for lang in self.lang_tgt:
+			if lang not in self.languages:
+				print(f"Sorry the program doesn't support {lang}")
+				if len(self.lang_tgt) == 1:
+					sys.exit()
+				else:
+					continue
+		
 			url = self.url + f'/{self.lang_src.lower()}-{lang.lower()}/{self.word.lower()}'
 			self.response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
-
+			
 			if self.response:
 				soup = BeautifulSoup(self.response.content, 'html.parser')
 				self.translations = tuple(transl.get_text(strip=True) for transl
@@ -57,6 +78,12 @@ class Translator:
 				self.examples_tgt = tuple(example.get_text(strip=True) for example
 									 in soup.select('#examples-content > .example > .trg')[:5])
 				self.examples_paired = tuple((src, tgt) for src, tgt in zip(self.examples_src, self.examples_tgt))
+			elif self.response.status_code == 404:
+				# sys.exit(f'Sorry, unable to find {self.word.lower()}')
+				print(f'Sorry, unable to find {self.word.lower()}')
+				sys.exit()
+			else:
+				sys.exit('Something wrong with your internet connection')
 
 			self.print_to_file(lang)
 			
